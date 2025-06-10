@@ -1,0 +1,101 @@
+﻿@page "/"
+@using DiscountCodeService
+@using System.ComponentModel.DataAnnotations;
+@inject DiscountService.DiscountServiceClient GrpcClient
+
+<h3>Generate Discount Codes</h3>
+<EditForm Model="codeModel" OnValidSubmit="Generate" FormName="codeAdd">
+    <DataAnnotationsValidator />
+    <div class="mb-3">
+        <label for="Name" class="form-label">Code Counts</label>
+        <div class="col-sm-10">
+            <InputNumber class="form-control" id="codeCount" @bind-Value="codeModel.Count"></InputNumber>
+            <ValidationMessage For="@(() => codeModel.Count)" />
+        </div>
+    </div>
+    <div class="mb-3">
+        <label for="Description" class="form-label">Code Length</label>
+        <div class="col-sm-10">
+            <InputNumber class="form-control" id="codeLength" @bind-Value="codeModel.Length"></InputNumber>
+            <ValidationMessage For="@(() => codeModel.Length)" />
+        </div>
+    </div>
+    <div class="form-group">
+        <button type="submit" class="btn btn-primary">Generate Code</button>
+    </div>
+</EditForm>
+<br />
+<Br />
+@if (generatedCodes.Any())
+{
+    <h4>Generated Codes:</h4>
+    <ul>
+        @foreach (var generatedCode in generatedCodes)
+        {
+            <li>@generatedCode</li>
+        }
+    </ul>
+}
+
+<hr />
+<h3>Use a Code</h3>
+<EditForm Model="useCode" OnValidSubmit="Use" FormName="Codeuse">
+    <div class="mb-3">
+        <label for="Description" class="form-label">Description</label>
+        <div class="col-sm-10">
+            <InputText @bind-Value="useCode" placeholder="Enter code" />
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-secondary">Use</button>
+</EditForm>
+<p>@useResult</p>
+
+@code {
+    [SupplyParameterFromForm]
+    protected CodeModel codeModel { get; set; }
+    [SupplyParameterFromForm]
+    protected string useCode { get; set; }
+
+    string useResult = "";
+    List<string> generatedCodes = new();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        codeModel ??= new() { Count = 1, Length = 8 };
+
+        if (string.IsNullOrEmpty(useCode))
+            useCode = string.Empty;
+    }
+
+    async Task Generate()
+    {
+        var request = new GenerateRequest { Count = (uint)codeModel.Count, Length = (uint)codeModel.Length };
+        var response = await GrpcClient.GenerateCodesAsync(request);
+        generatedCodes = response.Codes.ToList();
+    }
+
+    async Task Use()
+    {
+        var response = await GrpcClient.UseCodeAsync(new UseCodeRequest { Code = useCode });
+        useResult = response.Result switch
+        {
+            0 => "Code successfully used.",
+            1 => "Code not found.",
+            2 => "Code already used.",
+            _ => "Unknown result."
+        };
+    }
+
+    public class CodeModel
+    {
+        [Required(ErrorMessage = "Code count is required.")]
+        [Range(1, 100, ErrorMessage = "Code count must be between 1 and 100.")]
+        public int Count { get; set; }
+
+        [Required(ErrorMessage = "Code Length is required.")]
+        [Range(1, 100, ErrorMessage = "Code Length must be between 6 to 8.")]
+        public int Length { get; set; }
+    }
+}
